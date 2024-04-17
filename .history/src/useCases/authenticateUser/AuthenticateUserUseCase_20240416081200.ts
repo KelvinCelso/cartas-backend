@@ -1,7 +1,6 @@
 import { compare } from "bcryptjs";
 import { client } from "../../prisma/client";
 import { sign } from "jsonwebtoken";
-import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
 
 interface IRequest {
   email: string;
@@ -21,14 +20,9 @@ export class AuthenticateUserUseCase {
     const passwordMatch = compare(password, userAlreadyExists.password);
 
     if (!passwordMatch) {
-      throw new BaseError(
-        "FORBIDDEN",
-        HttpStatusCode.UNAUTORIZED,
-        false,
-        "email or password is incorrect"
-      );
+      throw new Error("User or password incorrect");
     }
-    const token = sign({ sub: userAlreadyExists.id }, process.env.JWT_SECRET, {
+    const token = sign({}, process.env.JWT_SECRET, {
       expiresIn: 30000,
       subject: userAlreadyExists.id,
     });

@@ -10,5 +10,5 @@ const authenticateUserController = new AuthenticateUserController();
 const getAllUserController = new GetAllUsersController();
 router.post("/user", createUserController.handle);
 router.post("/login", authenticateUserController.handle);
-router.get("/getUsers", ensureAuthenticated, getAllUserController.handle);
+router.get("/getUsers", getAllUserController.handle);
 export { router };

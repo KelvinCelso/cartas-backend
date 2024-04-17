@@ -28,7 +28,7 @@ export class AuthenticateUserUseCase {
         "email or password is incorrect"
       );
     }
-    const token = sign({ sub: userAlreadyExists.id }, process.env.JWT_SECRET, {
+    const token = sign({}, process.env.JWT_SECRET, {
       expiresIn: 30000,
       subject: userAlreadyExists.id,
     });

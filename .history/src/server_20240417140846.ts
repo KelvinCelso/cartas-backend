@@ -13,7 +13,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 const server: http.Server = http.createServer(app);
-const io = new ServerSocket(server);
+new ServerSocket(server);
 app.use(cors());
 app.use(express.json());
 
@@ -30,4 +30,4 @@ app.use(
 
 server.listen(port, () => console.log("Server is running on port:" + port));
 
-export { server, io};
+export { server };
