@@ -1,0 +1,20 @@
+import { Router } from "express";
+import { CreateUserController } from "./useCases/CreateUser/CreateUserController";
+import { AuthenticateUserController } from "./useCases/authenticateUser/AuthenticateUserController";
+import { GetAllUsersController } from "./useCases/getAllUsers/getAllUsersController";
+import { ensureAuthenticated } from "./middlewares/ensureAuthenticated";
+import { GetOneUserController } from "./useCases/getOneUser/getOneUserController";
+import { GetMessagesController } from "./useCases/getMessages/getMessagesController";
+
+const router = Router();
+const createUserController = new CreateUserController();
+const authenticateUserController = new AuthenticateUserController();
+const getAllUserController = new GetAllUsersController();
+const getOneUserController = new GetOneUserController();
+const getMessagesController = new GetMessagesController();
+router.post("/user", createUserController.handle);
+router.post("/login", authenticateUserController.handle);
+router.get("/getUsers", getAllUserController.handle);
+router.get("/getuser/:id", getOneUserController.handle);
+router.get("/getmessages", getMessagesController.handle);
+export { router };
