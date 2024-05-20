@@ -1,0 +1,1287 @@
+// File: src/helpers/getCurrentUserId.ts
+import { Request } from "express";
+import { BaseError, HttpStatusCode } from "../providers/errorProvider";
+import * as jwt from "jsonwebtoken";
+export function getCurrentUserId(request: Request) {
+  const authToken = request.headers.authorization;
+
+  if (!authToken)
+    throw new BaseError(
+      "UNAUTHORIZED",
+      HttpStatusCode.UNAUTORIZED,
+      true,
+      "token is missing"
+    );
+  const [, token] = authToken.split(" ");
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  var userId = decoded.sub;
+  return userId;
+}
+
+// File: src/helpers/updateUserBalance.ts
+import { client } from "../prisma/client";
+
+export async function updateUserBalance(userId: string) {
+  try {
+    // Calculate the sum of transactions for the given user
+    const result = await client.transaction.aggregate({
+      where: {
+        userId: userId,
+      },
+      _sum: {
+        value: true,
+      },
+    });
+
+    // Get the sum of transactions
+    const transactionSum = result._sum.value || 0;
+
+    // Update the user's balance
+    await client.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        balance: transactionSum,
+      },
+    });
+
+    console.log(`Balance for user ${userId} updated to ${transactionSum}`);
+  } catch (error) {
+    console.error(`Failed to update balance for user ${userId}:`, error);
+  }
+}
+
+// File: src/middlewares/ensureAuthenticated.ts
+import { NextFunction, Request, Response } from "express";
+import { verify } from "jsonwebtoken";
+import { BaseError, HttpStatusCode } from "../providers/errorProvider";
+
+export function ensureAuthenticated(
+  request: Request,
+  response: Response,
+  next: NextFunction
+) {
+  const authToken = request.headers.authorization;
+
+  if (!authToken) {
+    throw new BaseError(
+      "UNAUTHORIZED",
+      HttpStatusCode.UNAUTORIZED,
+      true,
+      "token is missing"
+    );
+  }
+  const [, token] = authToken.split(" ");
+
+  try {
+    verify(token, process.env.JWT_SECRET);
+
+    return next();
+  } catch (err) {
+    throw new BaseError(
+      "UNAUTHORIZED",
+      HttpStatusCode.UNAUTORIZED,
+      true,
+      "token invalid"
+    );
+  }
+}
+
+// File: src/middlewares/errorHandler.ts
+import { BaseError, HttpStatusCode } from "../providers/errorProvider";
+import { NextFunction, Request, Response } from "express";
+
+export function errorHandler(
+  err,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  console.error(err);
+
+  if (err instanceof BaseError) {
+    res.status(err.httpCode).json({
+      error: err.name,
+      message: err.message,
+    });
+  } else {
+    res.status(HttpStatusCode.INTERNAL_SERVER).json({
+      error: "INTERNAL SERVER ERROR",
+      message: "An unexpected error occurred",
+    });
+  }
+}
+
+// Register the error handler as the last middleware
+
+// File: src/prisma/client.ts
+import { PrismaClient } from "@prisma/client";
+
+const client = new PrismaClient();
+export { client };
+
+// File: src/providers/errorProvider.ts
+export enum HttpStatusCode {
+  OK = 200,
+  BAD_REQUEST = 400,
+  NOT_FOUND = 404,
+  INTERNAL_SERVER = 500,
+  FORBIDDEN = 403,
+  UNAUTORIZED = 401,
+}
+
+export class BaseError extends Error {
+  public readonly name: string;
+  public readonly httpCode: HttpStatusCode;
+  public readonly isOperational: boolean;
+
+  constructor(
+    name: string,
+    httpCode: HttpStatusCode,
+    isOperational: boolean,
+    description: string
+  ) {
+    super(description);
+    Object.setPrototypeOf(this, new.target.prototype);
+
+    this.name = name;
+    this.httpCode = httpCode;
+    this.isOperational = isOperational;
+
+    Error.captureStackTrace(this);
+  }
+}
+
+export class APIError extends BaseError {
+  constructor(
+    name,
+    httpCode = HttpStatusCode.INTERNAL_SERVER,
+    isOperational = true,
+    description = "internal server error"
+  ) {
+    super(name, httpCode, isOperational, description);
+  }
+}
+
+class HTTP404Error extends BaseError {
+  constructor(description) {
+    super("NOT FOUND", HttpStatusCode.NOT_FOUND, true, description);
+  }
+}
+
+// File: src/providers/stripeProvider.ts
+import Stripe from "stripe";
+
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export { stripeClient };
+
+// File: src/routes.ts
+import { Router } from "express";
+import { CreateUserController } from "./useCases/CreateUser/CreateUserController";
+import { AuthenticateUserController } from "./useCases/authenticateUser/AuthenticateUserController";
+import { GetAllUsersController } from "./useCases/getAllUsers/getAllUsersController";
+import { ensureAuthenticated } from "./middlewares/ensureAuthenticated";
+import { GetOneUserController } from "./useCases/getOneUser/getOneUserController";
+import { GetMessagesController } from "./useCases/getMessages/getMessagesController";
+import { SendMessageController } from "./useCases/sendMessage/sendMessageController";
+import { CreateCheckoutController } from "./useCases/createCheckout/createCheckoutController";
+import { StoreTransactionController } from "./useCases/storeTransation/storeTransationController";
+import { CreateRoomController } from "./useCases/createRoom/createRoomController";
+import { GetRoomByClientAndConsultorController } from "./useCases/getRoomByClientAndConsultor/getRoomByClientAndConsultorController";
+import { GetRoomsByUserController } from "./useCases/getRoomsByUser/getRoomsByUserController";
+import { UpdateRoomExpiryController } from "./useCases/updateRoom/updateRoomController";
+
+const router = Router();
+const createUserController = new CreateUserController();
+const authenticateUserController = new AuthenticateUserController();
+const getAllUserController = new GetAllUsersController();
+const getOneUserController = new GetOneUserController();
+const getMessagesController = new GetMessagesController();
+const sendMessageController = new SendMessageController();
+const createCheckoutController = new CreateCheckoutController();
+const storeTransactionController = new StoreTransactionController();
+const createRoomController = new CreateRoomController();
+const updateRoomExpiryController = new UpdateRoomExpiryController();
+const getRoomByClientAndConsultorController =
+  new GetRoomByClientAndConsultorController();
+const getRoomsByUserController = new GetRoomsByUserController();
+router.post("/user", createUserController.handle);
+router.post("/login", authenticateUserController.handle);
+router.get("/getUsers", getAllUserController.handle);
+router.get("/getuser/:id", getOneUserController.handle);
+router.get("/getmessages", getMessagesController.handle);
+router.post("/sendmessage", sendMessageController.handle);
+router.post("/create-checkout", createCheckoutController.handle);
+router.post("/store-transactions", storeTransactionController.handle);
+router.post("/create-room", createRoomController.handle);
+router.get("/get-room", getRoomByClientAndConsultorController.handle);
+router.get("/get-rooms/:userId", getRoomsByUserController.handle);
+router.post("/update-room-expiry", updateRoomExpiryController.handle);
+export { router };
+
+// File: src/server.ts
+import express, { NextFunction, Request, Response } from "express";
+
+import "express-async-errors";
+import * as dotenv from "dotenv";
+import { router } from "./routes";
+import * as http from "http";
+import cors from "cors";
+import * as socketio from "socket.io";
+import { ServerSocket } from "./socket/socketClient";
+import { errorHandler } from "./middlewares/errorHandler";
+import { webhookrouter } from "./webhook.routes";
+import * as ngrok from "ngrok";
+
+dotenv.config();
+
+const app = express();
+
+const port = process.env.PORT || 3000;
+const server: http.Server = http.createServer(app);
+const io = new ServerSocket(server);
+app.use(cors());
+app.use(webhookrouter);
+app.use(express.json());
+
+app.use(router);
+app.use(errorHandler);
+
+server.listen(port, () => {
+  ngrok
+    .connect(8000)
+    .then((ngrokURL) => console.log(`tunnel in:${ngrokURL}`))
+    .catch((err) => console.log(err));
+  console.log("Server is running on port:" + port);
+});
+
+export { server, io };
+
+// File: src/socket/socketClient.ts
+import { Server as HTTPServer } from "http";
+import { Socket, Server } from "socket.io";
+import { v4 } from "uuid";
+
+interface IJoinData {
+  user_id: string;
+}
+
+export class ServerSocket {
+  public static instance: ServerSocket;
+  public io: Server;
+
+  public users: { [uid: string]: Socket };
+
+  constructor(server: HTTPServer) {
+    ServerSocket.instance = this;
+    this.users = {};
+    this.io = new Server(server, {
+      serveClient: false,
+      pingInterval: 10000,
+      pingTimeout: 5000,
+      cookie: false,
+      cors: {
+        origin: "*",
+      },
+    });
+    this.io.on("connection", this.startListeners);
+    console.info("Socket IO started");
+  }
+  startListeners = (socket: Socket) => {
+    socket.on("join", (data: IJoinData) => {
+      if (!data.user_id || this.users[data.user_id]) {
+        socket.emit("usernameError", "Invalid or duplicate username");
+
+        socket["user_id"] = data.user_id;
+        console.log(`user ${data.user_id} joined`);
+        return;
+      }
+
+      this.users[data.user_id] = socket;
+    });
+    this.io.on("sendMessage", (data) => {
+      const recipient = this.users[data.to];
+      console.log(recipient, "exists");
+      if (recipient) {
+        recipient.emit("receivedMessage", data);
+        console.log(data);
+      } else {
+        socket.emit("messageError", "Recipient not found");
+      }
+    });
+    socket.on("trey", (data) => {
+      console.log("called");
+    });
+    console.log("connection on: ", socket.id);
+    socket.on("handhshake", () => {
+      console.info("Handshake received from " + socket.id);
+    });
+    socket.on("disconnect", () => {
+      if (socket["user_id"]) {
+        delete this.users[socket["user_id"]];
+      }
+      console.info("Disconnect received from" + socket);
+    });
+  };
+}
+
+// File: src/useCases/CreateUser/CreateUserController.ts
+import { NextFunction, Request, Response } from "express";
+import { CreateUserUseCase } from "./CreateUserUseCase";
+
+export class CreateUserController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    const { email, password, firstName, lastName, type, bio, birth_date } =
+      request.body;
+
+    const authenticateUserUseCase = new CreateUserUseCase();
+    try {
+      const user = await authenticateUserUseCase.execute({
+        email,
+        password,
+        firstName,
+        lastName,
+        bio,
+        type,
+        birth_date,
+      });
+
+      return response.json(user);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/CreateUser/CreateUserUseCase.ts
+import { sign } from "jsonwebtoken";
+import { client } from "../../prisma/client";
+import { hash } from "bcryptjs";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+interface IUserRequest {
+  email: string;
+  password: string;
+  type: "CONSULTOR" | "CLIENT";
+  birth_date: Date;
+  bio?: string;
+  firstName: string;
+  lastName: string;
+}
+
+class CreateUserUseCase {
+  async execute({
+    email,
+    password,
+    bio,
+    birth_date,
+    type,
+    firstName,
+    lastName,
+  }: IUserRequest) {
+    const userAlreadyExists = await client.user.findUnique({
+      where: {
+        email: email,
+      },
+    });
+
+    if (userAlreadyExists)
+      throw new BaseError(
+        "FORBIDDEN",
+        HttpStatusCode.FORBIDDEN,
+        true,
+        "user already exists"
+      );
+
+    const passwordHash = await hash(password, 8);
+    const date = new Date(birth_date).toISOString();
+
+    const user = await client.user.create({
+      data: {
+        email,
+        firstName,
+        lastName,
+        birth_date: date,
+        type,
+        password: passwordHash,
+      },
+    });
+    console.log("here");
+    const token = sign({}, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+      subject: user.id,
+    });
+    delete user.password;
+    return {
+      user: user,
+      token: token,
+    };
+  }
+}
+
+export { CreateUserUseCase };
+
+// File: src/useCases/authenticateUser/AuthenticateUserController.ts
+import { Request, Response } from "express";
+import { AuthenticateUserUseCase } from "./AuthenticateUserUseCase";
+
+export class AuthenticateUserController {
+  async handle(request: Request, response: Response) {
+    const { email, password } = request.body;
+    const authenticateUserUseCase = new AuthenticateUserUseCase();
+    const res = await authenticateUserUseCase.execute({
+      email,
+      password,
+    });
+    if (res instanceof Error)
+      response.status(400).json({ message: "could not log the user in" });
+
+    return response.json(res);
+  }
+}
+
+// File: src/useCases/authenticateUser/AuthenticateUserUseCase.ts
+import { compare } from "bcryptjs";
+import { client } from "../../prisma/client";
+import { sign } from "jsonwebtoken";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+interface IRequest {
+  email: string;
+  password: string;
+}
+
+export class AuthenticateUserUseCase {
+  async execute({ email, password }: IRequest) {
+    const userAlreadyExists = await client.user.findUnique({
+      where: {
+        email: email,
+      },
+    });
+    if (!userAlreadyExists) {
+      throw new Error("User or password incorrect");
+    }
+    const passwordMatch = compare(password, userAlreadyExists.password);
+
+    if (!passwordMatch) {
+      throw new BaseError(
+        "FORBIDDEN",
+        HttpStatusCode.UNAUTORIZED,
+        false,
+        "email or password is incorrect"
+      );
+    }
+    const token = sign({}, process.env.JWT_SECRET, {
+      expiresIn: 30000,
+      subject: userAlreadyExists.id,
+    });
+
+    delete userAlreadyExists.password;
+    return {
+      user: userAlreadyExists,
+      token: token,
+    };
+  }
+}
+
+// File: src/useCases/createCheckout/createCheckoutController.ts
+import { NextFunction, Request, Response } from "express";
+import { CreateCheckoutUseCase } from "./createCheckoutUseCase";
+
+export class CreateCheckoutController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    const createCheckoutUseCase = new CreateCheckoutUseCase();
+    try {
+      const { priceId, quantity, userId } = request.body;
+
+      const session = await createCheckoutUseCase.execute({
+        priceId: priceId,
+        quantity: quantity,
+        userId: userId,
+      });
+      return response.status(200).json(session);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/createCheckout/createCheckoutUseCase.ts
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+import { stripeClient } from "../../providers/stripeProvider";
+
+interface IRequest {
+  priceId: string;
+  quantity: number;
+  userId: string;
+}
+
+export class CreateCheckoutUseCase {
+  async execute({ priceId, quantity, userId }: IRequest) {
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId,
+          quantity: quantity,
+        },
+      ],
+      metadata: {
+        quantity: quantity,
+        userId: userId,
+      },
+      mode: "payment",
+      success_url: process.env.STRIPE_SUCCESS_URL,
+      cancel_url: process.env.STRIPE_CANCEL_URL,
+    });
+    if (!session)
+      throw new BaseError(
+        "FORBIDDEN",
+        HttpStatusCode.FORBIDDEN,
+        true,
+        "could not create session"
+      );
+    return {
+      session: session.url,
+    };
+  }
+}
+
+// File: src/useCases/createRoom/createRoomController.ts
+import { NextFunction, Request, Response } from "express";
+import { CreateRoomUseCase } from "./createRoomUseCase";
+
+export class CreateRoomController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    try {
+      const { clientId, consultorId, expiry } = request.body;
+
+      const createRoomUseCase = new CreateRoomUseCase();
+
+      const newRoom = await createRoomUseCase.execute({
+        clientId,
+        consultorId,
+        expiry,
+      });
+
+      response.status(201).json(newRoom);
+    } catch (err) {
+      console.error(err);
+
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/createRoom/createRoomUseCase.ts
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+import { ServerSocket } from "../../socket/socketClient";
+import { io } from "../../server";
+import { client } from "../../prisma/client";
+
+interface IRequest {
+  clientId: string;
+  consultorId: string;
+  expiry: number;
+}
+
+export class CreateRoomUseCase {
+  public serverSocket: ServerSocket;
+  constructor() {
+    this.serverSocket = ServerSocket.instance;
+  }
+  async execute({ clientId, consultorId, expiry }: IRequest) {
+    try {
+      // Validate inputs
+      if (!clientId || !consultorId) {
+        throw new BaseError(
+          "BAD REQUEST",
+          HttpStatusCode.BAD_REQUEST,
+          false,
+          "Client ID and Consultor ID are required."
+        );
+      }
+
+      // Check if the room already exists with the same clientId and consultorId
+      const existingRoom = await client.room.findFirst({
+        where: {
+          clientId,
+          consultorId,
+        },
+      });
+
+      if (existingRoom) {
+        throw new BaseError(
+          "BAD REQUEST",
+          HttpStatusCode.BAD_REQUEST,
+          false,
+          "Room already exists with the same client-consultor combination."
+        );
+      }
+
+      // Create a new room
+      const newRoom = await client.room.create({
+        data: {
+          clientId,
+          consultorId,
+          expiry: new Date(Date.now() + expiry * 60000),
+          expiryMins: expiry,
+        },
+      });
+      await client.transaction.create({
+        data: {
+          userId: clientId,
+          value: Number(-expiry),
+        },
+      });
+      io.io.emit("roomCreated", newRoom);
+
+      return newRoom;
+    } catch (err) {
+      throw new BaseError(
+        "BAD REQUEST",
+        HttpStatusCode.BAD_REQUEST,
+        false,
+        "Error creating the room: " + err.message
+      );
+    }
+  }
+}
+
+// File: src/useCases/getAllUsers/getAllUsersController.ts
+import { Request, Response } from "express";
+import { GetAllUsersUseCase } from "./getAllUsersUseCase";
+
+export class GetAllUsersController {
+  async handle(request: Request, response: Response) {
+    const { query } = request.query;
+    const getAllUsersUseCase = new GetAllUsersUseCase();
+    const user = await getAllUsersUseCase.execute({ query: query });
+    return response.json(user);
+  }
+}
+
+// File: src/useCases/getAllUsers/getAllUsersUseCase.ts
+import { compare } from "bcryptjs";
+import { client } from "../../prisma/client";
+import { sign } from "jsonwebtoken";
+import {
+  APIError,
+  BaseError,
+  HttpStatusCode,
+} from "../../providers/errorProvider";
+
+interface IRequest {
+  query?: any;
+}
+
+export class GetAllUsersUseCase {
+  async execute({ query }: IRequest) {
+    if (query) {
+      const user = await client.user.findMany({
+        where: {
+          type: {
+            equals: query == "CLIENT" ? "CLIENT" : "CONSULTOR",
+          },
+        },
+      });
+      if (!user)
+        throw new BaseError(
+          "NOT FOUND",
+          HttpStatusCode.NOT_FOUND,
+          true,
+          "user was not found"
+        );
+      return user;
+    }
+    const user = await client.user.findMany();
+    if (!user)
+      throw new BaseError(
+        "NOT FOUND",
+        HttpStatusCode.NOT_FOUND,
+        true,
+        "could not find users in the database "
+      );
+    user.forEach((user) => delete user.password);
+    return user;
+  }
+}
+
+// File: src/useCases/getMessages/getMessagesController.ts
+import { NextFunction, Request, Response } from "express";
+import { GetMessagesUseCase } from "./getMessagesUseCase";
+
+export class GetMessagesController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    try {
+      const { sender, receiver } = request.query;
+      const getMessagesUseCase = new GetMessagesUseCase();
+
+      const messages = await getMessagesUseCase.execute({
+        userFirst: sender,
+        userSecond: receiver,
+      });
+
+      response.status(200).json(messages);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/getMessages/getMessagesUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+export class GetMessagesUseCase {
+  async execute({ userFirst, userSecond }) {
+    const messages = await client.message.findMany({
+      where: {
+        OR: [
+          {
+            to: userFirst,
+            from: userSecond,
+          },
+          {
+            to: userSecond,
+            from: userFirst,
+          },
+        ],
+      },
+    });
+    if (!messages)
+      throw new BaseError(
+        "NOT FOUND",
+        HttpStatusCode.NOT_FOUND,
+        true,
+        "There are no messages to retrieve"
+      );
+
+    return messages;
+  }
+}
+
+// File: src/useCases/getOneUser/getOneUserController.ts
+import { NextFunction, Request, Response } from "express";
+import { GetAllUsersUseCase } from "./getOneUserUseCase";
+
+export class GetOneUserController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    const getOneUserUseCase = new GetAllUsersUseCase();
+    try {
+      const id = request.params.id;
+      const user = await getOneUserUseCase.execute({ id });
+      return response.status(200).json(user);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/getOneUser/getOneUserUseCase.ts
+import { compare } from "bcryptjs";
+import { client } from "../../prisma/client";
+import { sign } from "jsonwebtoken";
+import {
+  APIError,
+  BaseError,
+  HttpStatusCode,
+} from "../../providers/errorProvider";
+
+interface IRequest {
+  id: string;
+}
+
+export class GetAllUsersUseCase {
+  async execute({ id }: IRequest) {
+    const user = await client.user.findUnique({
+      where: {
+        id,
+      },
+    });
+    if (!user)
+      throw new BaseError(
+        "NOT FOUND",
+        HttpStatusCode.NOT_FOUND,
+        true,
+        "could not find user in the database "
+      );
+    const userBalance = await client.transaction.aggregate({
+      where: {
+        userId: user.id,
+      },
+      _sum: {
+        value: true,
+      },
+    });
+
+    const balance = userBalance._sum.value || 0;
+    delete user.password;
+    return { ...user, balance };
+  }
+}
+
+// File: src/useCases/getRoomByClientAndConsultor/getRoomByClientAndConsultorController.ts
+import { NextFunction, Request, Response } from "express";
+import { GetRoomByClientAndConsultorUseCase } from "./getRoomByClientAndConsultorUseCase";
+
+export class GetRoomByClientAndConsultorController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    try {
+      const { clientId, consultorId } = request.query;
+
+      const getRoomByClientAndConsultorUseCase =
+        new GetRoomByClientAndConsultorUseCase();
+
+      const room = await getRoomByClientAndConsultorUseCase.execute({
+        clientId,
+        consultorId,
+      });
+
+      response.status(200).json(room);
+    } catch (err) {
+      console.error(err);
+
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/getRoomByClientAndConsultor/getRoomByClientAndConsultorUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+interface IRequest {
+  clientId: any;
+  consultorId: any;
+}
+
+export class GetRoomByClientAndConsultorUseCase {
+  async execute({ clientId, consultorId }: IRequest) {
+    const room = await client.room.findFirst({
+      where: {
+        OR: [
+          { clientId, consultorId },
+          { clientId: consultorId, consultorId: clientId },
+        ],
+      },
+      include: {
+        client: true,
+        consultor: true,
+      },
+    });
+
+    if (!room) {
+      throw new BaseError(
+        "NOT FOUND",
+        HttpStatusCode.NOT_FOUND,
+        false,
+        "Room not found for the given client and consultor IDs."
+      );
+    }
+
+    return room;
+  }
+}
+
+// File: src/useCases/getRoomsByUser/getRoomsByUserController.ts
+import { NextFunction, Request, Response } from "express";
+import { GetRoomsByUserUseCase } from "./getRoomsByUserUseCase";
+
+export class GetRoomsByUserController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    try {
+      // Extract the userId from the request parameters
+      const { userId } = request.params;
+
+      // Create an instance of the GetRoomsByUserUseCase
+      const getRoomsByUserUseCase = new GetRoomsByUserUseCase();
+
+      // Execute the use case with the provided userId
+      const rooms = await getRoomsByUserUseCase.execute({ userId });
+
+      // Respond with the list of rooms and a status code of 200 (OK)
+      response.status(200).json(rooms);
+    } catch (err) {
+      console.error(err);
+      // Pass the error to the next middleware (error handler)
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/getRoomsByUser/getRoomsByUserUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+interface IRequest {
+  userId: string;
+}
+
+export class GetRoomsByUserUseCase {
+  async execute({ userId }: IRequest) {
+    const rooms = await client.room.findMany({
+      where: {
+        OR: [{ clientId: userId }, { consultorId: userId }],
+      },
+      include: {
+        consultor: true, // Include consultor details in the room
+        client: true,
+      },
+    });
+
+    // Return the found rooms
+    return rooms;
+  }
+}
+
+// File: src/useCases/sendMessage/sendMessageController.ts
+import { NextFunction, Request, Response } from "express";
+import { SendMessageUseCase } from "./sendMessageUseCase";
+import { server } from "../../server";
+import { ServerSocket } from "../../socket/socketClient";
+
+const io = new ServerSocket(server);
+export class SendMessageController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    const sendMessageUseCase = new SendMessageUseCase();
+    try {
+      const { from, to, message } = request.body;
+      const user = await sendMessageUseCase.execute({ from, to, message });
+      return response.status(200).json(user);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/sendMessage/sendMessageUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+import { ServerSocket } from "../../socket/socketClient";
+
+interface IRequest {
+  message: string;
+  to: string;
+  from: string;
+}
+
+export class SendMessageUseCase {
+  public serverSocket: ServerSocket;
+
+  constructor() {
+    this.serverSocket = ServerSocket.instance;
+  }
+
+  async execute({ from, to, message }: IRequest) {
+    const room = await client.room.findFirst({
+      where: {
+        OR: [
+          { clientId: from, consultorId: to },
+          { clientId: to, consultorId: from },
+        ],
+      },
+    });
+
+    if (!room) {
+      throw new BaseError(
+        "NOT FOUND",
+        HttpStatusCode.NOT_FOUND,
+        false,
+        "Room not found for the given user IDs."
+      );
+    }
+    if (room.expiry < new Date(Date.now()))
+      throw new BaseError(
+        "UNAUTHORIZED",
+        HttpStatusCode.UNAUTORIZED,
+        false,
+        "The room has expired"
+      );
+
+    const newMessage = await client.message.create({
+      data: {
+        message,
+        to,
+        from,
+        roomId: room.id,
+      },
+    });
+
+    this.serverSocket.io.emit("sendMessage", {
+      message: newMessage,
+      to,
+      from,
+    });
+
+    return newMessage;
+  }
+}
+
+// File: src/useCases/storeTransation/storeTransationController.ts
+import { NextFunction, Request, Response } from "express";
+import { stripeClient } from "../../providers/stripeProvider";
+import { StoreTransactionUseCase } from "./storeTransationUseCase";
+import { updateUserBalance } from "../../helpers/updateUserBalance";
+
+export class StoreTransactionController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    const storeTransactionUseCase = new StoreTransactionUseCase();
+    const sig = request.headers["stripe-signature"];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event;
+
+    try {
+      event = stripeClient.webhooks.constructEvent(
+        request.body,
+        sig,
+        endpointSecret
+      );
+    } catch (err) {
+      console.error("Webhook error:", err.message);
+      return response.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+
+      const quantity = session.metadata.quantity;
+      const userId = session.metadata.userId;
+
+      try {
+        const transaction = await storeTransactionUseCase.execute({
+          quantity,
+          userId,
+        });
+        await updateUserBalance(userId);
+
+        return response.status(200).json(transaction);
+      } catch (error) {
+        console.error(error);
+        next(error);
+      }
+    }
+  }
+}
+
+// File: src/useCases/storeTransation/storeTransationUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+
+interface IRequest {
+  quantity: number;
+  userId: string;
+}
+
+export class StoreTransactionUseCase {
+  async execute({ userId, quantity }) {
+    try {
+      const transaction = await client.transaction.create({
+        data: {
+          userId,
+          value: Number(quantity),
+        },
+      });
+
+      return transaction;
+    } catch (err) {
+      throw new BaseError("BAD REQUEST", HttpStatusCode.BAD_REQUEST, true, err);
+    }
+  }
+}
+
+// File: src/useCases/updateRoom/updateRoomController.ts
+import { NextFunction, Request, Response } from "express";
+import { UpdateRoomExpiryUseCase } from "./updateRoomExpiryUseCase";
+
+export class UpdateRoomExpiryController {
+  async handle(request: Request, response: Response, next: NextFunction) {
+    try {
+      // Extract the roomId and newExpiry from the request body
+      const { roomId, newExpiry } = request.body;
+
+      // Create an instance of the UpdateRoomExpiryUseCase
+      const updateRoomExpiryUseCase = new UpdateRoomExpiryUseCase();
+
+      // Execute the use case with the provided roomId and newExpiry
+      const updatedRoom = await updateRoomExpiryUseCase.execute({
+        roomId,
+        newExpiry,
+      });
+
+      // Respond with the updated room and a status code of 200 (OK)
+      response.status(200).json(updatedRoom);
+    } catch (err) {
+      console.error(err);
+      // Pass the error to the next middleware (error handler)
+      next(err);
+    }
+  }
+}
+
+// File: src/useCases/updateRoom/updateRoomExpiryUseCase.ts
+import { client } from "../../prisma/client";
+import { BaseError, HttpStatusCode } from "../../providers/errorProvider";
+import moment from "moment";
+
+interface IRequest {
+  roomId: string;
+  newExpiry: number; // The new expiry time for the room in minutes
+}
+
+export class UpdateRoomExpiryUseCase {
+  async execute({ roomId, newExpiry }: IRequest) {
+    try {
+      // Find the room by ID
+      const room = await client.room.findUnique({
+        where: {
+          id: roomId,
+        },
+      });
+
+      // Check if the room was found
+      if (!room) {
+        throw new BaseError(
+          "NOT FOUND",
+          HttpStatusCode.NOT_FOUND,
+          false,
+          "Room not found."
+        );
+      }
+
+      // Calculate the new expiry time using moment.js
+      const newExpiryTime = moment().utc().add(newExpiry, "minutes").toDate();
+
+      // Update the room's expiry time
+      const updatedRoom = await client.room.update({
+        where: {
+          id: roomId,
+        },
+        data: {
+          expiry: newExpiryTime,
+          expiryMins: newExpiry,
+        },
+      });
+
+      // Create a transaction for updating the expiry time
+      await client.transaction.create({
+        data: {
+          userId: updatedRoom.clientId,
+          value: Number(-newExpiry),
+        },
+      });
+
+      // Return the updated room
+      return updatedRoom;
+    } catch (e) {
+      // Handle errors and throw a BaseError
+      throw new BaseError(
+        "BAD REQUEST",
+        HttpStatusCode.BAD_REQUEST,
+        true,
+        "Could not update the room expiry: " + e.message
+      );
+    }
+  }
+}
+
+// File: src/webhook.routes.ts
+import { Router } from "express";
+import { StoreTransactionController } from "./useCases/storeTransation/storeTransationController";
+import express from "express";
+const webhookrouter = Router();
+const storeTransactionController = new StoreTransactionController();
+webhookrouter.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  storeTransactionController.handle
+);
+
+export { webhookrouter };
+
+// File: prisma/schema.prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id String @id @default(uuid())
+  firstName String
+  lastName String
+  title String?
+  birth_date DateTime
+  email String @unique
+  password String
+  balance Float @default(0.0)
+  type UserType @default(CLIENT)
+  bio String?
+  transactions transaction[]
+  messageSent message[] @relation("senderUser")
+  recieverSent message[] @relation("recieverrUser")
+  roomsAsClient Room[] @relation("clientRooms")
+  roomsAsConsultor Room[] @relation("consultorRooms")
+}
+
+model message {
+  id String @id @default(uuid())
+  from String
+  to String
+  roomId String? // Optional reference to the room
+  room Room? @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  message String
+  sender User @relation("senderUser", fields: [from], references: [id], onDelete: Cascade)
+  reciever User @relation("recieverrUser", fields: [to], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model transaction {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId], references: [id], onDelete: Cascade)
+  value Float
+  createdAt DateTime @default(now())
+}
+
+model Room {
+  id String @id @default(uuid())
+  clientId String
+  consultorId String
+  expiry DateTime
+  expiryMins Int
+  createdAt DateTime @default(now())
+  client User @relation("clientRooms", fields: [clientId], references: [id], onDelete: Cascade)
+  consultor User @relation("consultorRooms", fields: [consultorId], references: [id], onDelete: Cascade)
+  messages message[]
+  @@unique([clientId, consultorId]) 
+}
+
+enum UserType {
+  CONSULTOR
+  CLIENT
+}
+

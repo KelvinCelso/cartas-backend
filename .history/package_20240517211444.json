@@ -1,12 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "cartas api",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "ts-node-dev --transpile-only --respawn --ignore-watch node_modules src/server.ts",
-    "context": "bash +x get_code_context.sh && ./bin/get_code_context.sh"
+    "context":"bash +x get_code_context.sh && ./bin/get_code_context.sh",
   },
   "dependencies": {
     "@prisma/client": "^5.12.1",
@@ -16,7 +16,6 @@
     "@types/socket.io": "^3.0.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-async-errors": "^3.1.1",

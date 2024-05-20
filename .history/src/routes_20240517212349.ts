@@ -13,7 +13,6 @@ import { GetRoomByClientAndConsultorController } from "./useCases/getRoomByClien
 import { GetRoomsByUserController } from "./useCases/getRoomsByUser/getRoomsByUserController";
 import { UpdateRoomExpiryController } from "./useCases/updateRoom/updateRoomController";
 import { UpdateUserController } from './useCases/updateUser/updateUserController';
-import { RefreshTokenController } from "./useCases/refreshToken/refreshTokenController";
 const router = Router();
 const createUserController = new CreateUserController();
 const authenticateUserController = new AuthenticateUserController();
@@ -29,7 +28,6 @@ const getRoomByClientAndConsultorController =
   new GetRoomByClientAndConsultorController();
 const getRoomsByUserController = new GetRoomsByUserController();
 const updateUserController = new UpdateUserController();
-const refreshTokenController = new RefreshTokenController();
 
 router.post("/user", createUserController.handle);
 router.post("/login", authenticateUserController.handle);
@@ -44,7 +42,4 @@ router.get("/get-room", getRoomByClientAndConsultorController.handle);
 router.get("/get-rooms/:userId", getRoomsByUserController.handle);
 router.post("/update-room-expiry", updateRoomExpiryController.handle);
 router.put('/user/:id', updateUserController.handle, ensureAuthenticated);
-
-// ...
-router.post('/refresh-token', refreshTokenController.handle);
 export { router };
