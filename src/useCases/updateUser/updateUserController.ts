@@ -1,12 +1,11 @@
-import { NextFunction, Request, Response } from 'express';
-import { UpdateUserUseCase } from './updateUserUseCase';
-
+import { NextFunction, Request, Response } from "express";
+import { UpdateUserUseCase } from "./updateUserUseCase";
 
 export class UpdateUserController {
   async handle(request: Request, response: Response, next: NextFunction) {
     try {
       const { id } = request.params;
-      const { firstName, lastName, bio, birth_date } = request.body;
+      const { firstName, lastName, bio, expertise, photo } = request.body;
 
       const updateUserUseCase = new UpdateUserUseCase();
       const updatedUser = await updateUserUseCase.execute({
@@ -14,7 +13,8 @@ export class UpdateUserController {
         firstName,
         lastName,
         bio,
-        birth_date,
+        expertise,
+        photo,
       });
 
       return response.status(200).json(updatedUser);
