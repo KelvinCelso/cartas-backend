@@ -7,10 +7,11 @@ interface IRequest {
   lastName?: string;
   bio?: string;
   birth_date?: Date;
+  
 }
 
 export class UpdateUserUseCase {
-  async execute({ id, firstName, lastName, bio, birth_date }: IRequest) {
+  async execute({ id, firstName, lastName, bio, birth_date}: IRequest) {
     // Find the user by ID
     const user = await client.user.findUnique({
       where: {
@@ -37,6 +38,7 @@ export class UpdateUserUseCase {
         firstName: firstName || user.firstName,
         lastName: lastName || user.lastName,
         bio: bio || user.bio,
+        
         birth_date: birth_date ? new Date(birth_date) : user.birth_date,
       },
     });
