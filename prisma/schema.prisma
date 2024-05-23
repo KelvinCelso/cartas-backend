@@ -25,6 +25,7 @@ model User {
   lastName         String
   title            String?
   birth_date       DateTime
+  img_url          String?
   email            String         @unique
   password         String
   balance          Float          @default(0.0)
