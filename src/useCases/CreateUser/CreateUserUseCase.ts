@@ -8,6 +8,7 @@ interface IUserRequest {
   type: "CONSULTOR" | "CLIENT";
   birth_date: Date;
   bio?: string;
+  role: "ADMIN" |"USER",
   firstName: string;
   lastName: string;
 }
@@ -19,6 +20,7 @@ class CreateUserUseCase {
     bio,
     birth_date,
     type,
+    role,
     firstName,
     lastName,
   }: IUserRequest) {
@@ -37,13 +39,14 @@ class CreateUserUseCase {
       );
 
     const passwordHash = await hash(password, 8);
-    const date = new Date(birth_date).toISOString();
+    const date = new Date(birth_date)
 
     const user = await client.user.create({
       data: {
         email,
         firstName,
         lastName,
+        role,
         birth_date: date,
         type,
         password: passwordHash,

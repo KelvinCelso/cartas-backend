@@ -6,6 +6,7 @@ import { updateUserBalance } from "../../helpers/updateUserBalance";
 export class StoreTransactionController {
   async handle(request: Request, response: Response, next: NextFunction) {
     const storeTransactionUseCase = new StoreTransactionUseCase();
+    console.log("here")
     const sig = request.headers["stripe-signature"];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
     let event;

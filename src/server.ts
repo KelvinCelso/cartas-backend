@@ -16,13 +16,12 @@ dotenv.config();
 
 const app = express();
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 const server: http.Server = http.createServer(app);
 const io = new ServerSocket(server);
 app.use(cors());
 app.use(webhookrouter);
 app.use(express.json());
-
 app.use(router);
 app.use(errorHandler);
 

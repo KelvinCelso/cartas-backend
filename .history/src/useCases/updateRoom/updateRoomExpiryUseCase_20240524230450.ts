@@ -56,24 +56,7 @@ export class UpdateRoomExpiryUseCase {
           value: Number(-newExpiry),
         },
       });
-      const userBalance = await client.transaction.aggregate({
-        where: {
-          userId: updatedRoom.clientId,
-        },
-        _sum: {
-          value: true,
-        },
-      });
-      
-      const balance = userBalance._sum.value || 0;
-      await client.user.update({
-        where: {
-          id: updatedRoom.clientId
-        },
-        data: {
-          balance: balance
-        }
-      })
+
       // Return the updated room
       return updatedRoom;
     } catch (e) {

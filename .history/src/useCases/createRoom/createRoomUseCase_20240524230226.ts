@@ -55,7 +55,7 @@ export class CreateRoomUseCase {
       });
       await client.user.update({
         where: {
-          id: consultorId
+          id: clientId
         },
         data: {
           credit: expiry,
@@ -67,25 +67,6 @@ export class CreateRoomUseCase {
           value: Number(-expiry),
         },
       });
-
-      const userBalance = await client.transaction.aggregate({
-        where: {
-          userId: clientId,
-        },
-        _sum: {
-          value: true,
-        },
-      });
-      
-      const balance = userBalance._sum.value || 0;
-      await client.user.update({
-        where: {
-          id: clientId
-        },
-        data: {
-          balance: balance
-        }
-      })
       io.io.emit("roomCreated", newRoom);
 
       return newRoom;
