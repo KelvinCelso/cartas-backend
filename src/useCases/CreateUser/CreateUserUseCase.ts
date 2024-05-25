@@ -35,7 +35,7 @@ class CreateUserUseCase {
         "FORBIDDEN",
         HttpStatusCode.FORBIDDEN,
         true,
-        "user already exists"
+        "Email já esta em uso."
       );
 
     const passwordHash = await hash(password, 8);

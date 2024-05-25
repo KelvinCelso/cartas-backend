@@ -19,17 +19,22 @@ export class AuthenticateUserUseCase {
     });
 
     if (!userAlreadyExists) {
-      throw new Error('User or password incorrect');
+      throw new BaseError(
+        "FORBIDDEN",
+        HttpStatusCode.UNAUTORIZED,
+        false,
+        "Email ou a senha incorreta."
+      );
     }
 
-    const passwordMatch = await compare(password, userAlreadyExists.password);
+    const passwordMatch = await compare(password, userAlreadyExists.password); // await the comparison
 
     if (!passwordMatch) {
       throw new BaseError(
         'FORBIDDEN',
         HttpStatusCode.UNAUTORIZED,
         false,
-        'email or password is incorrect'
+        "Senha incorreta."
       );
     }
 
@@ -54,6 +59,7 @@ export class AuthenticateUserUseCase {
     });
 
     delete userAlreadyExists.password;
+
     return {
       user: userAlreadyExists,
       token: token,
