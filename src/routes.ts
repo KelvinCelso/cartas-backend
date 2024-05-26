@@ -45,7 +45,7 @@ router.post("/create-room", createRoomController.handle);
 router.get("/get-room", getRoomByClientAndConsultorController.handle);
 router.get("/get-rooms/:userId", getRoomsByUserController.handle);
 router.post("/update-room-expiry", updateRoomExpiryController.handle);
-router.put('/user/:id', updateUserController.handle, ensureAuthenticated);
+router.put('/user/:id', updateUserController.handle);
 router.put('/pay-consultor/:id', payConsultorController.handle);
 // ...
 router.post('/refresh-token', refreshTokenController.handle);

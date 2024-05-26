@@ -10,7 +10,7 @@ import { ServerSocket } from "./socket/socketClient";
 import { errorHandler } from "./middlewares/errorHandler";
 import { webhookrouter } from "./webhook.routes";
 import * as ngrok from "ngrok";
-
+import multer from 'multer';
 
 dotenv.config();
 
@@ -21,9 +21,13 @@ const server: http.Server = http.createServer(app);
 const io = new ServerSocket(server);
 app.use(cors());
 app.use(webhookrouter);
+app.use(express.urlencoded({extended: true})); 
 app.use(express.json());
 app.use(router);
 app.use(errorHandler);
+
+const upload = multer({ dest: 'uploads/' });
+app.use(upload.any());
 
 server.listen(port, () => {
   ngrok
