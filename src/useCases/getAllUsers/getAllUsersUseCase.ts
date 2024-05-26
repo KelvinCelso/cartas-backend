@@ -19,7 +19,11 @@ export class GetAllUsersUseCase {
           type: {
             equals: query == "CLIENT" ? "CLIENT" : "CONSULTOR",
           },
+          role: {
+            equals: "USER"
+          }
         },
+      
       });
       if (!user)
         throw new BaseError(
